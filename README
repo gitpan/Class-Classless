@@ -1,5 +1,5 @@
 README for Class::Classless
-                                        Time-stamp: "1999-05-31 19:37:09 MDT"
+                                        Time-stamp: "2000-05-13 19:40:59 MDT"
 
 [Excerpted from the POD...]
 
@@ -116,7 +116,7 @@ MacPerl site_lib or lib directory, and move Classless.pm into there.
 SUPPORT
 
 Questions, bug reports, useful code bits, and suggestions for
-Class::Classless should just be sent to me at sburke@netadventure.net
+Class::Classless should just be sent to me at sburke@cpan.org
 
 
 AVAILABILITY
@@ -126,10 +126,10 @@ Comprehensive Perl Archive Network (CPAN).  Visit
 <http://www.perl.com/CPAN/> to find a CPAN site near you.
 
 
-Copyright (c) 1999 Sean M. Burke.  All rights reserved.
+Copyright (c) 1999, 2000 Sean M. Burke.  All rights reserved.
 
 This library is free software; you can redistribute it
 and/or modify it under the same terms as Perl itself.
 
 AUTHOR
-     Sean M. Burke, sburke@netadventure.net
+     Sean M. Burke, sburke@cpan.org

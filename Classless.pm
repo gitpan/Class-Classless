@@ -1,13 +1,13 @@
 
-#Time-stamp: "1999-09-22 23:04:06 MDT"
+#Time-stamp: "2000-05-13 19:42:13 MDT"
 
-package Class::Classless;
 require 5;
+package Class::Classless;
 use strict;
 use vars qw($VERSION @ISA $Debug $ROOT %Pretty_form);
 use Carp;
 
-$VERSION = "1.21";
+$VERSION = "1.22";
 @ISA = ();
 $Debug = 0 unless defined $Debug;
 
@@ -742,14 +742,14 @@ other programming languages.
 
 =head1 COPYRIGHT
 
-Copyright (c) 1999 Sean M. Burke.  All rights reserved.
+Copyright (c) 1999, 2000 Sean M. Burke.  All rights reserved.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
 
 =head1 AUTHOR
 
-Sean M. Burke, sburke@netadventure.net
+Sean M. Burke, sburke@cpan.org
 
 =cut
 
