@@ -1,5 +1,5 @@
 
-#Time-stamp: "2000-10-18 00:08:25 MDT"
+#Time-stamp: "2004-12-29 20:13:16 AST"
 
 require 5;
 package Class::Classless;
@@ -7,7 +7,7 @@ use strict;
 use vars qw($VERSION @ISA $Debug $ROOT %Pretty_form);
 use Carp;
 
-$VERSION = "1.34";
+$VERSION = "1.35";
 @ISA = ();
 $Debug = 0 unless defined $Debug;
 

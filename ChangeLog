@@ -1,6 +1,10 @@
 Revision history for Perl extension Class::Classless
-                                        Time-stamp: "2000-10-18 00:04:10 MDT"
+                                        Time-stamp: "2004-12-29 20:13:07 AST"
 
+2004-12-29  Sean M. Burke  sburke@cpan.org
+
+	* Release 1.35 -- just rebundling.  No code changes.
+	
 2000-10-17  Sean M. Burke  sburke@cpan.org
 	
 	* Release 1.34 -- just a buxfig version:

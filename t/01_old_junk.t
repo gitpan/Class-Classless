@@ -1,21 +1,18 @@
-# Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl test.pl'
-# Time-stamp: "1999-09-22 23:50:04 MDT"
-######################### We start with some black magic to print on failure.
 
-# Change 1..1 below to 1..last_test_to_print .
-# (It may become useful if the test is moved to ./t subdirectory.)
+# Time-stamp: "2004-12-29 20:12:14 AST"
 
-BEGIN { $| = 1; print "1..8\n"; }
-END {print "not ok 1\n" unless $loaded;}
+use Test;
+BEGIN { plan tests => 8; }
+
 use Class::Classless 1.1;
-$loaded = 1;
-print "ok 1\n";
+
+ok 1;
+print "# Perl v$], Class::Classless $Class::Classless::VERSION\n";
+
 
 ###########################################################################
 
 #$Class::Classless::Debug = 2;
-$| = 1;
 
 sub nodelist { join '.', map { "" . $_->{'NAME'} . ""} @_ }
 my %nodes;
@@ -34,7 +31,8 @@ sub mknew {
 }
 
 my $root_list = nodelist( $Class::Classless::ROOT->ISA_TREE );
-print "root_list: $root_list : ", 'ROOT' eq $root_list ? "ok 2\n" : "FAIL 2\n";
+print "# root_list: $root_list\n";
+ok $root_list, 'ROOT';
 
 mknew('a');
 mknew('b', 'a');
@@ -50,13 +48,15 @@ mknew('j', 'h', 'g', 'i');
 ###########################################################################
 
 my $j_list = nodelist( $nodes{'j'}->ISA_TREE );
-print "j_list: $j_list : ",
- 'J.H.B.G.F.E.A.C.I.D.ROOT' eq $j_list ? "ok 3\n" : "FAIL 3\n";
+print "# j_list: $j_list\n";
+ok $j_list, 'J.H.B.G.F.E.A.C.I.D.ROOT';
 
 ###########################################################################
 
-$nodes{'b'}{'METHODS'}{'zaz'} = sub { print "ok 4\n" };
+my $x = 0;
+$nodes{'b'}{'METHODS'}{'zaz'} = sub { $x = 1; return; };
 $nodes{'j'}->zaz;
+ok $x;
 
 $nodes{'j'}{'METHODS'}{'const1'} = 'konwun';
 $nodes{'h'}{'METHODS'}{'const2'} =
@@ -65,21 +65,13 @@ $nodes{'b'}{'METHODS'}{'const3'} =
   bless ['foo','bar','baz'], '_deref_array';
 $nodes{'g'}{'METHODS'}{'const4'} = undef;
 
-print '',
- ($nodes{'j'}->const1 eq 'konwun')
- ? "ok 5\n" : "FAIL5\n";
 
-print '',
- ($nodes{'j'}->const2 eq 'kontoo')
- ? "ok 6\n" : "FAIL 6\n";
+ok $nodes{'j'}->const1, 'konwun';
 
-print '',
- (join('~', $nodes{'j'}->const3) eq 'foo~bar~baz')
- ? "ok 7\n" : "FAIL 7\n";
+ok $nodes{'j'}->const2, 'kontoo';
+ok join('~', $nodes{'j'}->const3), 'foo~bar~baz';
 
-print '',
- (not defined($nodes{'j'}->const4))
- ? "ok 8\n" : "FAIL 8\n";
+ok (not defined($nodes{'j'}->const4));
 
 
 
