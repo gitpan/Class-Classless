@@ -1,5 +1,5 @@
 
-#Time-stamp: "2000-08-21 14:56:49 MDT"
+#Time-stamp: "2000-10-18 00:08:25 MDT"
 
 require 5;
 package Class::Classless;
@@ -7,7 +7,7 @@ use strict;
 use vars qw($VERSION @ISA $Debug $ROOT %Pretty_form);
 use Carp;
 
-$VERSION = "1.33";
+$VERSION = "1.34";
 @ISA = ();
 $Debug = 0 unless defined $Debug;
 
@@ -224,6 +224,9 @@ you need the value of the methods, use allcan() or howcan().
 * $thing->VERSION -- same as $thing->get_i('VERSION').  Note that ROOT
 has an entry of 'VERSION' => '0.00'.  Do not try to override the
 VERSION method.
+
+* $thing->VERSION(version_number) -- dies if $thing->VERSION is
+less than version_number.  Otherwise returns $thing->VERSION.
 
 * $thing->isa($thing2) -- returns true if $thing2 is in $thing's ISA
 tree -- i.e., if it's an ancestor of $thing.  (Also returns true if
@@ -828,6 +831,13 @@ other programming languages.
 And thanks to Damian Conway for stritching the brines of his poor
 students with this module.
 
+=head1 SEE ALSO
+
+For information on Perl's classy OOP system, see L<perlobj>,
+L<perltoot>, L<UNIVERSAL>, and 
+Damian Conway's excellent book I<Object Oriented Perl> from
+Manning Press.
+
 =head1 COPYRIGHT
 
 Copyright (c) 1999, 2000 Sean M. Burke.  All rights reserved.
@@ -853,6 +863,7 @@ $ROOT = bless {
   'PARENTS' => [], # I am the obj that has no parents
   'NAME'    => 'ROOT',
   'NO_FAIL' => 0,
+  'VERSION' => 0.00,
 
   'METHODS' => {
 
@@ -1042,7 +1053,7 @@ $ROOT = bless {
 ;
 # End of creating $ROOT and its methods.
 
-$Class::Classless::X::VERSION = '0.00';
+*Class::Classless::X::VERSION = \( $ROOT->{'VERSION'} ); # alias it
 @Class::Classless::X::ISA = ();
 
 ###########################################################################
@@ -1120,7 +1131,7 @@ sub Class::Classless::X::AUTOLOAD {
                 'Class::Classless::CALLSTATE'
                ),                # $_[1]    -- the callstate
         ;
-        goto &{ $v }; # yes, magic goto!
+        goto &{ $v }; # yes, magic goto!  bimskalabim!
       }
       return @$v if ref($v) eq '_deref_array';
       return $$v if ref($v) eq '_deref_scalar';
@@ -1306,7 +1317,6 @@ sub Class::Classless::X::can { # NOT like UNIVERSAL::can ...
 
 sub Class::Classless::X::VERSION {
   # like UNIVERSAL::VERSION.
-  # if $X->i
   print "Searching in ", ( $_[0]->{'NAME'} || $_[0] ),
         " for VERSION\n" if $Debug;
   if(defined($_[1])) {
@@ -1316,8 +1326,10 @@ sub Class::Classless::X::VERSION {
           . " version $_[1] required--this is only version $v"
          )
       if $v < $_[1];
+    return $v;
   } else {
-    $_[0]->get_i('VERSION');
+    #print "V<", $_[0]->get_i('VERSION'), ">\n";
+    return $_[0]->get_i('VERSION');
   }
 }
 
@@ -1437,8 +1449,10 @@ sub nodelist { join ', ', map { "" . ($_->{'NAME'} || $_) . ""} @_ }
 #   keys, or a closure that responded to only certain parameters,
 #   etc.  But I like it this way.  And I like being able to say simply
 #   $cs->NEXT
+#  Yes, these are a bit cryptically written, but it's behoovy for
+#   them to be very very efficient.
 
-$Class::Classless::CALLSTATE::VERSION = $Class::Classless::VERSION;
+*Class::Classless::CALLSTATE::VERSION = \$Class::Classless::VERSION;
 @Class::Classless::ISA = ();
 sub Class::Classless::CALLSTATE::found_name { $_[0][0] }
    #  the method name called and found
