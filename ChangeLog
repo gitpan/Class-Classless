@@ -1,7 +1,21 @@
 Revision history for Perl extension Class::Classless
-                                        Time-stamp: "1999-05-31 19:49:40 MDT"
+                                        Time-stamp: "1999-09-22 23:49:51 MDT"
 
 1999-05-31  Sean M. Burke  sburke@netadventure.net
 
 	* Release 0.25 -- first release version.
 
+1999-09-22  Sean M. Burke  sburke@netadventure.net
+
+	* Release 1.21 -- second release version
+	* Added support for 'constant methods' (and magic dereferencing)
+	* Added $callstate->no_fail, set_no_fail_true, set_fail_false,
+	   and set_fail_undef
+	* Added $callstate->via_next
+	* Added support for $callstate->NEXT with no (explicit) method name
+	* IMPORTANT CHANGE!!  The 'can' method now returns simply either
+	   true or false, instead of returning the coderef for
+	   true
+	* Added 'howcan' method
+	* Documentation, yet more documentation, always more documentation.
+	* Added more tests to test.pl

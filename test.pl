@@ -1,14 +1,14 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# Time-stamp: "1999-05-31 19:25:52 MDT"
+# Time-stamp: "1999-09-22 23:50:04 MDT"
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..4\n"; }
+BEGIN { $| = 1; print "1..8\n"; }
 END {print "not ok 1\n" unless $loaded;}
-use Class::Classless;
+use Class::Classless 1.1;
 $loaded = 1;
 print "ok 1\n";
 
@@ -57,3 +57,31 @@ print "j_list: $j_list : ",
 
 $nodes{'b'}{'METHODS'}{'zaz'} = sub { print "ok 4\n" };
 $nodes{'j'}->zaz;
+
+$nodes{'j'}{'METHODS'}{'const1'} = 'konwun';
+$nodes{'h'}{'METHODS'}{'const2'} =
+  do {my $x = 'kontoo'; bless \$x, '_deref_scalar'};
+$nodes{'b'}{'METHODS'}{'const3'} =
+  bless ['foo','bar','baz'], '_deref_array';
+$nodes{'g'}{'METHODS'}{'const4'} = undef;
+
+print '',
+ ($nodes{'j'}->const1 eq 'konwun')
+ ? "ok 5\n" : "FAIL5\n";
+
+print '',
+ ($nodes{'j'}->const2 eq 'kontoo')
+ ? "ok 6\n" : "FAIL 6\n";
+
+print '',
+ (join('~', $nodes{'j'}->const3) eq 'foo~bar~baz')
+ ? "ok 7\n" : "FAIL 7\n";
+
+print '',
+ (not defined($nodes{'j'}->const4))
+ ? "ok 8\n" : "FAIL 8\n";
+
+
+
+__END__
+

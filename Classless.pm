@@ -1,5 +1,5 @@
-#!/bin/false
-#Time-stamp: "1999-05-31 19:34:58 MDT"
+
+#Time-stamp: "1999-09-22 23:04:06 MDT"
 
 package Class::Classless;
 require 5;
@@ -7,7 +7,7 @@ use strict;
 use vars qw($VERSION @ISA $Debug $ROOT %Pretty_form);
 use Carp;
 
-$VERSION = "0.25";
+$VERSION = "1.21";
 @ISA = ();
 $Debug = 0 unless defined $Debug;
 
@@ -63,7 +63,7 @@ This prints the following:
        'METHODS', {  }, 
        'PARENTS', [ 'Ob1' ], 
 
-=head1 OVERVIEW
+=head1 DESCRIPTION
 
 In class-based OOP frameworks, methods are applicable to objects by
 virtue of objects belonging to classes that either provide those
@@ -85,9 +85,9 @@ child (inheritor) of the original object.  (Where do you get the one
 original object?  The language provides one, which has no parents, and
 which contains some general purpose methods like "clone".)
 
-=head1 USING OBJECTS
+=head1 WHAT'S IN AN OBJECT
 
-Each object is a reference to a hash, containing:
+Each classless object is a reference to a hash, containing:
 
 * an entry 'PARENTS', which is a reference to a list of this node's
 parents.  (For ROOT, this will be an empty list; for most nodes, there
@@ -99,14 +99,20 @@ multiple inheritance.)
 attribute is not required, and deleting it is harmless.
 
 * An entry 'METHODS', which is a reference to a hash that maps method
-names (e.g., "funk") to coderefs.  When you call $foo->funk(@stuff),
-Class::Classless looks to see if there's a $foo->{'METHODS'}{'funk'}. 
-If so, that coderef is called with ($foo, @stuff) as its parameter
-list.  But if there is no such method, Class::Classless looks in $foo's
-parent to see if there's a $foo_parent->{'METHODS'}{'funk'}, and so on
-up the inheritance tree.  If no 'funk' method is found in $foo or any
-of $foo's ancestors, Class::Classless dies with an error to that
-effect.  (But see the section on the NO_FAIL attribute, below.)
+names (e.g., "funk") to coderefs or to constant values.  When you
+call $foo->funk(@stuff), Class::Classless's dispatcher looks to see if
+there's a $foo->{'METHODS'}{'funk'}.  If so, and if it's a coderef, then
+that coderef is called with ($foo, $callstate, @stuff) as its
+parameter list  (See the section "What A Method Sees", below, for
+an explanation of this).  If
+there's a $foo->{'METHODS'}{'funk'} and it's I<not> a coderef, then the
+value is returned, possibly with automagical dereferencing.  (See the
+section "Constant Methods", below.)  But, finally, if there is no such
+method, Class::Classless's dispatcher looks in $foo's parent to see
+if there's a $foo_parent->{'METHODS'}{'funk'}, and so on up the
+inheritance tree.  If no 'funk' method is found in $foo or any of
+$foo's ancestors, Class::Classless dies with an error to that effect.
+(But see the section on the NO_FAIL attribute, below.)
 
 * Anything else you want to put in the hash.  I provide no inherent
 mechanism for accessing attributes (unlike, say, Self, which can
@@ -171,21 +177,48 @@ clone-children that would be orphaned (a bad thing) if this node lost
 its PARENT attribute, say.
 
 * $thing->allcan('baz') -- returns the list (in order) of all 'baz'
-methods in $thing's ISA tree (each one being a coderef, and there may,
-in theory, be duplication).  This may be an empty list.  (Note that
+methods in $thing's ISA tree.  This may be an empty list.  (Note that
 the NO_FAIL attribute has no effect on the allcan method.)
+Note especially that the magic dereferencing magic for constant
+method values is not triggered.  That is, what allcan('baz') returns is
+simply a list of the values of $x->{'METHODS'}{'baz'} wherever such
+a METHODS entry exists, for all objects in $thing's inheritance tree.
+
+* $thing->howcan('baz') -- just like allcan, but the list returned
+consists of pairs of values, where each pair consists of 1) the object
+that provides the 'baz' method, followed by 2) the value it provides
+for that method.  (Remember that that value may be a coderef, or it
+may be any kind of other reference (which will I<not> be magically
+resolved as it would have been by the dispatcher -- see the section
+"Constant Methods", or it may be any nonreference scalar value --
+including 0 or undef!)  The pairs are in order.  You can read this
+list into a hash that maps from the methods to the method-values, but
+of course then you lose the ordering.
 
 * $thing->can('baz') -- if $thing is capable of the method 'baz', this
-returns the coderef it would execute.  Otherwise returns false.  Do
-not try to override the can method.  (Note that the NO_FAIL attribute
-has no effect on the can method.)
+returns true, otherwise it returns false.  Do not try to override the
+can method.  (Note that the NO_FAIL attribute has no effect on the
+can method.)  Note also that this does NOT return the method's value,
+as it did in the first version of Class::Classless, which (like Perl's
+normal object system) would return the (coderef) value of the method
+'baz' for the first object in $thing's tree that provided such a
+method.
+
+That worked then, since all method values under the first version
+of Class::Classless had to be coderefs (which were, of course, true
+in a boolean context).  However, now that a Class::Classless
+method have have a constant value that is false, having can() return
+that value would be indistinguishable from having it return any
+false value meant as a signal the object incapable of the method.
+In short, can() simply has to return either true or false now.  If
+you need the value of the methods, use allcan() or howcan().
 
 * $thing->VERSION -- same as $thing->get_i('VERSION').  Note that ROOT
 has an entry of 'VERSION' => '0.00'.  Do not try to override the
 VERSION method.
 
 * $thing->isa($thing2) -- returns true if $thing2 is in $thing's ISA
-tree -- i.e., if it's an ancestor if $thing.  (Also returns true if
+tree -- i.e., if it's an ancestor of $thing.  (Also returns true if
 $thing2 B<is> $thing.)  Otherwise returns false.  Do not try to
 override the isa method.
 
@@ -202,13 +235,83 @@ Currently it's a no-op, for many annoyingly complicated reasons.  Do
 I<not> try to override the DESTROY method!  If you don't know what
 DESTROY methods are for anyway, don't worry about it.
 
+=head1 CONSTANT METHODS
+
+I expect that most methods (i.e., things in the $foo->{'METHODS'}
+hash) will be coderefs.  However, if you want the value of a method
+to be a constant, I figure there's no point in making you say:
+
+  $foo->{'METHODS'}{'funk'} = sub { 7 };
+
+just so $foo->funk can return the constant value 7.
+
+So instead, I've made it so that when you call $foo->funk, and
+Class::Classless finds that $foo->{'METHODS'}{'funk'} exists,
+or that $some_ancestor->{'METHODS'}{'funk'} exists, it takes that
+value and decides what to do with that value, like so:
+
+* Unless that value (which, by the way, is free to be undef!) is a
+reference, then it's a constant, so return it.  That means that if you
+set $foo->{'METHODS'}{'funk'} = 7, then $foo->funk will always return
+7.
+
+* If it's an unblessed coderef, call it with arguments as explained
+in the "What a Method Sees" section, below.  Note that I<blessed>
+coderefs (as rare at they are) are I<not> called.
+
+* Otherwise, it must be some sort other sort of constant to return,
+which happens to be a reference.
+
+* If it's a reference of the class '_deref_array', then it's
+array-dereferenced before being returned.  So if you wanted
+$foo->band_members to return a constant list ('Ad Rock', 'MCA', 'Mike
+D'), you can do it with: $foo->{'METHODS'}{'band_members'} = bless [
+'Ad Rock', 'MCA', 'Mike D'], '_deref_array'. When you call
+$foo->band_members then, Class::Classless's dispatcher will
+basically say:
+return(@{$foo->{'METHODS'}{'band_members'}});
+
+* If it's a reference of the class '_deref_scalar', then it's
+scalar-dereferenced before being returned.  This is not as
+immediately and obviously useful as the same trick with
+'_deref_array', but it does make possible a few tricks.  First off,
+you can have something like:
+
+    my $counter = 0;
+    bless $counter, '_deref_scalar';
+    $fee->{'METHODS'}{'counter_value'} = \$counter;
+    $fye->{'METHODS'}{'counter_value'} = \$counter;
+    $foe->{'METHODS'}{'counter_value'} = \$counter;
+
+to have these all share the same value, which you'd get from going
+$fee->counter_value, $fye->counter_value, or $foe->counter_value.
+
+Second off, suppose (as unlikely as it is) you actually wanted a
+I<constant> value to be returned -- but the value you want returned
+is an unblessed coderef!  If you just stuck that value in
+$foo->{'METHODS'}, it'd get called instead of returned as a constant.
+Well, you can just go:
+
+    my $cr = sub { ...whatever... };
+    $foo->{'METHODS'}{'zaz'} = bless \$cr, '_deref_scalar';
+
+So when you call $foo->zaz, Class::Classless sees a scalar of class
+'_deref_scalar', and returns it, like
+return(${$foo->{'METHODS'}{'zaz'}}).  That value is, of course, your
+coderef.
+
+* And finally, if the value in $foo->{'METHODS'}{'funk'} was a
+reference, but was neither an unblessed coderef, nor a reference of
+class '_deref_array', nor of class '_deref_scalar', then it's just
+returned.
+
 =head1 WHAT A METHOD SEES
 
 Under Perl's I<normal> object system, when you call
 
   $foo->bar($x, @y ...)
 
-the method C<bar>'s C<@_> will consist of
+C<bar>'s C<@_> will consist of
 
   ($foo, $x, @y ...)
 
@@ -219,20 +322,30 @@ So normally the first thing C<bar> will do is something like:
 or
 
   my $obj  = shift @_;
-  my first = shift @_;
+  my $first = shift @_;
   my @rest = @_;
 
-I<However>, subs called as methods by Class::Classless have one extra
-argument; $_[1] is the "callstate", an object created every time you
-call a Class::Classless object, and belonging to the class
+I<However>, subs called as methods by Class::Classless's dispatcher
+have one extra argument; $_[1] is the "callstate", an object created
+every time you call a Class::Classless object, and belonging to the class
 'Class::Classless::CALLSTATE'.  Normally all you'd ever want to do
 with it is say:
 
   $callstate->NEXT('foo', $bar, @baz)
 
 which is equivalent to $callstate->SUPER::foo($bar, @baz) under Perl's
-normal object system.  See the section "Callstates" if you want to
-know about the details of callstates.
+normal object system.  See the section "More on NEXT".
+
+So, in other words, the first line of a Class::Classless method to be
+called as
+
+  $foo->bar($x, @y ...)
+
+would be
+
+  my($obj, $callstate, $first, @rest) = @_;
+
+or the like.
 
 =head1 SHARED DATA
 
@@ -273,9 +386,9 @@ and even this, if this makes any useful sense:
 
 However, to repeat myself somewhat, the only reason this is shared is
 that C<clone> didn't copy the 'Interface' method when it made clones
-of $generic, so C<get_i> on any of the children so produced will find
-the attribute not in the children, but will fall back on finding it in
-$generic->{'Interface'}.
+of $generic, so calling C<get_i> on any of the children so produced
+will find the attribute not in the children, but will fall back on
+finding it in $generic->{'Interface'}.
 
 But if you go and set $w1->{'Interface'} (as opposed to using
 C<set_i>), then $w1->get_i('Interface') will get you the value of
@@ -287,7 +400,7 @@ $generic->get_i('Interface').
 
 And in any case, you can really share data by virtue of the fact that
 the clone method (at least, not the default clone method) doesn't do
-copying of references (AKA "deep copyign") -- so you can just have all
+copying of references (AKA "deep copying") -- so you can just have all
 the objects that you want to share data simply have a reference to a
 common piece of data:
 
@@ -299,16 +412,6 @@ common piece of data:
     $w->{'zaz'} = [5,6,7];
     $w->{'quux'} = {a => 11, b => 12};
 
-=head1 THE NO_FAIL ATTRIBUTE
-
-If you call $thing->zaz and there is no 'zaz' method that $thing is
-capable of, then normally Class::Classless with throw a fatal error.
-However, if $thing->get_i{'NO_FAIL'} is true, then a no-operation
-(like sub { return; } ) simply results.
-
-(NO_FAIL also controls what happens if you $thing->NEXT('zaz') and
-there is no NEXT 'zaz' method; if NO_FAIL is true, a no-operation
-results; otherwise, a fatal error results.)
 
 =head1 INHERITANCE SYSTEM
 
@@ -340,7 +443,7 @@ convert it to a flat list consisting of search path) as:
     C   B   A   Y   X   Root/Universal
 
 However, I think this is just not the right way to do things.  The
-poitn of X being a child of Y is so that X can have a chance to
+point of X being a child of Y is so that X can have a chance to
 override Y.  Perl's normal depth-first search doesn't allow that in
 cases like this.  So my rule is: search over ancestors depth-first,
 but never search a node until you've searched all its children (that
@@ -353,54 +456,78 @@ list as:
 So X does override Y.  (And Root/Universal is not a special case in
 the searching rule.)
 
-Now, fatal errors may result with bizarre trees -- namely ones with
+Now, fatal errors B<may> result with bizarre trees -- namely ones with
 cyclicity in them, such as: X's parents are A and B, A's parent is B,
-and B's parent is A.  But in some cases Class::Classless might just
+and B's parent is A.  But in some cases Class::Classless B<might> just
 try to ignore the cyclic part.  So just don't make any cyclic trees,
 OK?
 
-=head1 CAVEATS AND MUSINGS
+=head1 THE NO_FAIL ATTRIBUTE
 
-* Don't make cyclic trees.
+If you call $thing->zaz and there is no 'zaz' method that $thing is
+capable of, then normally Class::Classless with throw a fatal error.
+However, if $thing->get_i{'NO_FAIL'} is true, then a no-operation
+(like sub { return; } ) simply results.
 
-* The reason the $callstate->NEXT('foo') is called NEXT is because it
-starts looking in the I<next> object in the linearization of the
-ISA_TREE.  This next object is not necessarily an ancestor (i.e., a
-I<super>ior object) of the current object -- in the above section,
-X as A's next node, altho A is clearly not a superior node.
+(NO_FAIL also controls what happens if you call $thing->NEXT('zaz')
+and there is no NEXT 'zaz' method; if NO_FAIL is true, a no-operation
+results; otherwise, a fatal error results.  See the section 
+"More on NEXT", below.)
 
-* Don't try to derive new I<classes> from any of the classes that
-Class::Classless defines.
+Implementationally, the way this is implemented is that when you call
+a method, a routine of Class::Classless's called the dispatcher looks
+figures out the linearization of the inheritance tree of the target
+object of the method call, and then, one-at-a-time, goes over the
+objects in the linearization, looking for an object whose METHODS
+hash contains an entry for the name of the method. ("Linearization"
+meaning simply a list of objects, in the order in which they should
+be searched.)
 
-* Note that there's currently no mechanism for parent objects to know
-what their children are.  However, if you needed this, you could
-override the clone method with something that would track this.  But
-note that this would create circular data structures, complicating
-garbage collection -- you'd have to explicitly destroy objects, like
-with Tree::DAG_Node nodes.
+Each call also creates an object, called a "callstate" object, one of
+whose attributes is called "no_fail" (note lowercase), and whose
+value starts out being undef.  If the dispatcher, while going thru
+the linearization and looking at the METHODS, sees an object with a
+defined 'NO_FAIL' attribute (note uppercase), it uses that value
+(the value of the first object in the list with a defined NO_FAIL
+attribute) to set the no_fail attribute of the callstate.  If it
+finishes searching the list and hasn't seen an object with a METHODS
+entry for the method it's dispatching for, one of two things will happen:
+if no_fail is set to true, the dispatcher will act as if it found
+the method and its value was sub{return}.  Otherwise, the dispatcher
+will die with a fatal error like:
 
-* Why don't I let objects define their own DESTROY methods?  One short
-reason: this unpredictably and intermittently triggers a strange bug
-in Perl's garbage collection system during global destruction.
-Better, longer reason: I don't see any way to make sure that, during
-global destruction, Perl never destroys a parent before its children.
-If a parent is destroyed before its children, and that parent provides
-a DESTROY that the children inherit, then when it comes time for the
-children to be destroyed, the DESTROY method they planned on using
-would have become in accessible.  This seems an intractable problem.
+  Can't find method foo in OBJECT_NAME or any ancestors
+
+So, normally, the only way for the no_fail attribute of the callstate
+to be usefully set is for the dispatcher to have seen an object with
+a NO_FAIL attribute set.  In other words, if you want method lookup
+in an object to be unfailing, set $x->{'NO_FAIL'} = 1 for it or
+any of its ancestors; and if you want to override B<that> for a
+descendant, set its $y->{'NO_FAIL'} = 0.
+(Note that just for sake of sanity, the NO_FAIL of $ROOT is set to 0.)
+
+But in the case of using callstate->NEXT call to continue a method
+dispatch (i.e., getting the dispatcher to pick up where it left off),
+you may want to control the callstate's no_fail attribute directly,
+regardless of the NO_FAIL attributes of any of the objects the
+dispatcher's seen so far.  In that case, you can use the
+$callstate->set_no_fail_true to set no_fail to true (i.e., lookup
+failures from NEXTing off of this callstate don't generate fatal
+errors).  See the section on callstates, below, for more options.
 
 =head1 CALLSTATES
 
-Every time you invoke a method on a Class::Classless object (whether
+Every time you call a method on a Class::Classless object (whether
 normally, or via a $callstate->NEXT(...) call), a new
 Class::Classless::CALLSTATE object is created, and passed as $_[1] to
 that method.  Besides this being the way I happen to implement
-$callstate->NEXT(I<methodname>, I<arguments>), you can use this
-object to get metainformation about this method call.  You can access
-that information via:
+$callstate->NEXT(I<methodname>, I<arguments>) (by recording the state
+of the dispatcher for later resumption), you can use this object to
+get metainformation about this method call.  You can access that
+information like so:
 
 * $callstate->target -- the object that was the target of the method
-call.  Same as $_[0] for the method.
+call.  Same as the $_[0] that the method sees.
 
 * $callstate->found_name -- the name this method was called as.
 
@@ -417,21 +544,178 @@ Same as $callstate->home->{'METHODS'}{$callstate->target}.
 $callstate->lineage list where this method was found.  In other words,
 $callstate->home is ($callstate->lineage)[$callstate->found_depth].
 
+* $callstate->set_no_fail_true -- set the no_fail attribute of this
+callstate to true -- meaning failure is impossible for any NEXT calls
+based on this call.  (Obviously it's meaningless to consider failure
+of the current method -- it was already found, otherwise how could
+there be code that's accessing its callstate!)  I expect this is
+useful for cases where you want to NEXT, but aren't sure that there
+is a next method in the tree.  With the no_fail set, failure in the
+NEXT lookup will act as if it triggered a method consisting of just
+sub { return; }.
+
+* $callstate->set_no_fail_false -- set the no_fail attribute of this
+callstate to true -- meaning failure is possible for any NEXT calls
+in the contituation of the current call state.  I don't anticipate
+this being useful, but I provide it for completeness.
+
+* $callstate->set_no_fail_undef -- set the no_fail attribute of this
+callstate to undef -- meaning that failure is possible, but that this
+value can be set by the next object in the linearization of the
+inheritance tree.  I don't anticipate this being useful, but I
+provide it for completeness.
+
+* $callstate->no_fail -- returns the value of no_fail attribute of
+this callstate so far.  See the section "The NO_FAIL attribute",
+above.  I don't anticipate this being useful, but I provide it for
+completeness.
+
+* $callstate->via_next -- return true the current method was
+called via $callstate->NEXT.  Otherwise returns false.
+
 The whole callstate mechanism (used by the above methods as well as by
 the NEXT method) assumes you don't change the object's ISA tree (or
 any of the METHODS hashes in any part of the ISA tree) in the middle
-of the call.
+of the call.  If you do, the information in $callstate will be out of
+synch with reality (since it contains the linearization as of the
+B<beginning> of the call)), which is fine as long as you don't use it
+for anything (like NEXTing) after that point, in that call.
+
+=head1 MORE ON NEXT
+
+Calling $callstate->NEXT is the mechanism I allow for doing what
+Perl's built-in object system does with SUPER:: calls, and like what
+some object systems do with "before- and after-demons".
+
+The basic syntax to NEXT is as follows:
+
+  $callstate->NEXT( method_name , ...arguments... );
+
+However, if you call it with a method_name of undef, it will
+use the current value of $callstate->found_name, i.e., the name
+the currently running method was found as.  Note that this
+can come to de undefined in two ways -- either by the parameter
+list being null, as in either of:
+
+  $callstate->NEXT;
+   ...AKA...
+  $callstate->NEXT();
+
+or by being explicitly undef:
+
+  $callstate->NEXT(undef, $foo, $bar);
+
+In either case, the undef is interpreted as $callstate->found_name.
+I offer this as just a (hopefully) convenient shortcut.
+
+Now, if you call NEXT and there is no method with the desired
+name in the remainder of the linearization of the inheritance tree,
+what happens depends on the no_fail attribute; if you want to
+insure that the NEXT will not fail (since failing would mean a
+fatal error), you can set the callstate's no_fail attribute to true:
+
+  $callstate->set_no_fail_true
+
+(which means it can't fail.)
+
+Note, by the way, that NEXTing never automatically copies the
+argument list of the current method for the next one. You have to do
+that yourself.  There's many ways to do it, but consider something
+like:
+
+  $x->{"METHODS"}{"foo"} = sub {
+    my($o, $cs) = splice(@_,0,2);
+    # then copy arguments from @_, but don't change @_ any further:
+    my($zaz, @foo) = @_
+    
+    ...stuff...
+    
+    # then you can pass on the arguments still in @_
+    $cs->NEXT(undef,@_);
+      # undef to mean 'the name I was called as'
+    
+    ...stuff...
+    
+  };
+
+If you forgot and just said $cs->NEXT() or (pointlessly) $cs->NEXT(undef),
+then the next 'foo' method would have nothing in its argument list after
+its usual two first items (the target object and the callstate).
+
+A further note: currently, each method call (whether normal, or via a
+NEXT) creates a new callstate object.  However, when NEXTing, the
+attributes of the current callstate object are copied into the new
+callstate object -- except for the via_next attribute, which is forced
+to true, of course.
 
 =head1 BASIC IMPLEMENTATION STRATEGY
 
 This module does what it does by blessing all "Class::Classless"
-objects into a class that provides no methods except for an AUTOLOAD
-method that intercepts all method calls.  This is how I fiendishly
-usurp Perl's normal method dispatching scheme.  (Actually I do provide
-other methods upfront: C<can>, C<VERSION>, C<isa>, C<DESTROY>, and
-C<ISA_TREE>, as I basically have to, it turns out.)
+objects into a class (Class::Classless::X, in point of fact)
+that provides no methods except for an AUTOLOAD
+method that intercepts all method calls and does the dispatching.
+This is how I fiendishly usurp Perl's normal method dispatching
+scheme.  (Actually I do provide other methods upfront: C<can>,
+C<VERSION>, C<isa>, C<DESTROY>, and C<ISA_TREE>, as I basically
+have to, it turns out.)
 
 Consult the source for details.  It's not that long.
+
+=head1 CAVEATS AND MUSINGS
+
+* Note that the C<can> you may export from UNIVERSAL has nothing
+at all to do with the C<can> that you should be using for
+Class::Classless objects.  The only way you should call C<can>
+on classless objects is like $obj->can('foo').
+
+* How to test if something is a classless object:
+C<ref($obj) eq 'Class::Classless::X'>
+
+* Don't make cyclic trees.  I don't go to extreme lengths to stop
+you from doing so, but don't expect sane behavior if you do.
+
+* The reason the $callstate->NEXT('foo') is called NEXT is because it
+starts looking in the I<next> object in the linearization of the
+ISA_TREE.  This next object is not necessarily an ancestor (i.e., a
+I<super>ior object) of the current object -- in the above section,
+X is A's next node, altho A is clearly not a superior node.
+
+* Don't try to derive new I<classes> from any of the classes that
+Class::Classless defines.  First off, it may not work, for any
+reading of "work".  Second off, what's the point?
+
+* Note that there's currently no mechanism for parent objects to know
+what their children are.  However, if you needed this, you could
+override the clone method with something that would track this.  But
+note that this would create circular data structures, complicating
+garbage collection -- you'd have to explicitly destroy objects, the
+way you have to with Tree::DAG_Node nodes.
+
+* Why don't I let objects define their own DESTROY methods?  One short
+reason: this unpredictably and intermittently triggers a strange bug
+in Perl's garbage collection system during global destruction.
+Better, longer reason: I don't see any way to make sure that, during
+global destruction, Perl never destroys a parent before its children.
+If a parent is destroyed before its children, and that parent provides
+a DESTROY that the children inherit, then when it comes time for the
+children to be destroyed, the DESTROY method they planned on using
+would have become inaccessible.  This seems an intractable problem.
+
+* Callstate objects were added as an afterthought.  They are meant to
+be small and inexpensive, not extensible.  I can't imagine a use for
+them other than the uses outlined in the documentation -- i.e.,
+getting at (or sometimes modifying) an attribute of the current state
+of the method dispatcher. If you're considering any other use of
+callstate objects, email me -- I'd be interested in hearing what you
+have in mind.
+
+* While I was writing Class::Classless, I read up on Self.  To quote
+FOLDOC (C<http://wombat.doc.ic.ac.uk/foldoc/foldoc.cgi?query=Self>),
+Self is/was "a small, dynamically typed object-oriented language,
+based purely on prototypes and delegation. Self was developed by the
+Self Group at Sun Microsystems Laboratories, Inc. and Stanford
+University. It is an experimental exploratory programming language."
+For more information, see C<http://www.sunlabs.com/research/self/>
 
 =head1 YOU KNOW WHAT THEY SAY...
 
@@ -449,6 +733,12 @@ The thanks for the quote as well as for thinking of the
 name "Class::Classless" go to Veblen, who can be seen making
 that secret potato soup of his at
 C<http://www.llnl.gov/llnl/art-cv/image1.jpg>
+
+Thanks to my many minions in EFNet #perl for help, suggestions, and
+encouragement.  Especial thanks to Merlyn, Halfjack, and Skrewtape for
+assuring me that the idea of objects-without-class wasn't just some
+Felliniesque fever dream I had, but is a concept that has precedent in
+other programming languages.
 
 =head1 COPYRIGHT
 
@@ -586,9 +876,32 @@ $ROOT = bless {
         map
         {
           (   ref($_->{'METHODS'}     || 0)  # sanity
-           && ref($_->{'METHODS'}{$m} || 0)
+           && exists($_->{'METHODS'}{$m})
           )
           ? $_->{'METHODS'}{$m} : ()
+        }
+        @{$_[1][2]};
+    },
+
+    'howcan' => sub {
+      # like allcan, but returns a list consisting of pairs, where
+      #  each pair is the object that provides the so-named method
+      #  and then the value of the method
+      my($it, $m) = @_[0,2];
+      return unless ref $it;
+
+      croak "undef is not a valid method name"       unless defined($m);
+      croak "null-string is not a valid method name" unless length($m);
+
+      print "AllCan-seeking method <$m> for <", $it->{'NAME'} || $it,
+        ">\n" if $Debug > 1;
+      return
+        map
+        {
+          (   ref($_->{'METHODS'}     || 0)  # sanity
+           && exists($_->{'METHODS'}{$m})
+          )
+          ? ($_, $_->{'METHODS'}{$m}) : ()
         }
         @{$_[1][2]};
     },
@@ -644,21 +957,30 @@ sub Class::Classless::X::AUTOLOAD {
        if $Debug;
     }
 
-    if(  ref($lineage[$i]{'METHODS'}     || 0)  # sanity
-      && ref($lineage[$i]{'METHODS'}{$m} || 0)
+    if(     ref($lineage[$i]{'METHODS'}     || 0)  # sanity
+      && exists($lineage[$i]{'METHODS'}{$m})
     ){
-      my @args =
-        (
-         $it,                   # $_[0]    -- target object
-         bless([$m, $i, \@lineage, $no_fail],
-               'Class::Classless::CALLSTATE'
-              ),                # $_[1]    -- the callstate
-         @_                     # @_[2...] -- the args
-       )
-      ; # copy it, so that shifting on it is harmless
-      return &{ $lineage[$i]{'METHODS'}{$m} }(@args);  # call it!
-    }
+      # We found what we were after.  Now see what to do with it.
+      my $v = $lineage[$i]{'METHODS'}{$m};
+      return $v unless defined $v and ref $v;
 
+      if(ref($v) eq 'CODE') { # normal case, I expect!
+        my @args =
+          (
+           $it,                   # $_[0]    -- target object
+           # a NEW callstate
+           bless([$m, $i, \@lineage, $no_fail, $prevstate ? 1 : 0],
+                 'Class::Classless::CALLSTATE'
+                ),                # $_[1]    -- the callstate
+           @_                     # @_[2...] -- the args
+         )
+        ; # copy it, so that shifting on it is harmless
+        return &{ $lineage[$i]{'METHODS'}{$m} }(@args);  # call it!
+      }
+      return @$v if ref($v) eq '_deref_array';
+      return $$v if ref($v) eq '_deref_scalar';
+      return $v; # fallthru
+    }
   }
 
   if($m eq 'DESTROY') { # mitigate DESTROY-lookup failure at global destruction
@@ -697,6 +1019,14 @@ sub Class::Classless::X::ISA_TREE {
   my $has_mi = 0; # set to 0 on the first node we see with 2 parents!
   # First, just figure out what's in the tree.
   my %last_child = ($_[0] => 1); # as if already seen
+
+  # if $last_child{$x} == $y, that means:
+  #  1) incidentally, we've passed the node $x before.
+  #  2) $x is the last child of $y,
+  #     so that means that $y can be pushed to the stack only after
+  #      we've pushed $x to the stack.
+  
+
   my @tree_nodes;
   {
     my $current;
@@ -788,8 +1118,8 @@ sub Class::Classless::X::ISA_TREE {
 
 ###########################################################################
 
-sub Class::Classless::X::can { # like UNIVERSAL::can
-  # return the first so-named method in $it's ISA tree, or undef if none.
+sub Class::Classless::X::can { # NOT like UNIVERSAL::can ...
+  # return 1 if $it is capable of the method given -- otherwise 0
   my($it, $m) = @_[0,1];
   return undef unless ref $it;
 
@@ -800,13 +1130,12 @@ sub Class::Classless::X::can { # like UNIVERSAL::can
     ">\n" if $Debug > 1;
 
   foreach my $o (&Class::Classless::X::ISA_TREE($it)) {
-    return # return it!
-      $o->{'METHODS'}{$m}
+    return 1
      if  ref($o->{'METHODS'} || 0)   # sanity
-      && ref($o->{'METHODS'}{$m} || 0);
+      && exists $o->{'METHODS'}{$m};
   }
 
-  return undef;
+  return 0;
 }
 
 ###########################################################################
@@ -927,6 +1256,9 @@ sub nodelist { join ', ', map { "" . ($_->{'NAME'} || $_) . ""} @_ }
 ###########################################################################
 ###########################################################################
 # Methods for the CALLSTATE class.
+#  Basically, CALLSTATE objects represent the state of the dispatcher,
+#  frozen at the moment when the method call was dispatched to the
+#  appropriate sub
 
 $Class::Classless::CALLSTATE::VERSION = $Class::Classless::VERSION;
 @Class::Classless::ISA = ();
@@ -944,11 +1276,20 @@ sub Class::Classless::CALLSTATE::sub_found {
   $_[0][2][  $_[0][1]   ]{'METHODS'}{ $_[0][0] }
 }  #  the routine called
 
+sub Class::Classless::CALLSTATE::no_fail          {  $_[0][3]         }
+sub Class::Classless::CALLSTATE::set_no_fail_true {  $_[0][3] = 1     }
+sub Class::Classless::CALLSTATE::set_fail_false   {  $_[0][3] = 0     }
+sub Class::Classless::CALLSTATE::set_fail_undef   {  $_[0][3] = undef }
+
+sub Class::Classless::CALLSTATE::via_next         {  $_[0][4] }
+
 sub Class::Classless::CALLSTATE::NEXT {
-  croak "NEXT needs at least one argument: \$cs->NEXT('method'...)"
-   unless @_ > 1;
+  #croak "NEXT needs at least one argument: \$cs->NEXT('method'...)"
+  # unless @_ > 1;
+   # no longer true.
   my $cs = shift @_;
-  my $m  = shift @_;
+  my $m  = shift @_; # which may be (or come out) undef...
+  $m = $cs->[0] unless defined $m; #  the method name called and found
 
   ($cs->[2][0])->$m(
     bless( \$cs, 'Class::Classless::CALLSTATE::SHIMMY' ),
@@ -961,3 +1302,4 @@ sub Class::Classless::CALLSTATE::NEXT {
 1;
 
 __END__
+
