@@ -1,6 +1,17 @@
 Revision history for Perl extension Class::Classless
-                                        Time-stamp: "2000-05-13 19:49:30 MDT"
+                                        Time-stamp: "2000-08-21 15:07:29 MDT"
 
+2000-08-21  Sean M. Burke  sburke@cpan.org
+
+	* Release 1.33 -- supports memoization (caching) of each object's
+	lineage.
+	* Minor doc changes.
+	* Dispatcher now uses "magic goto" to pass off to sub methods.
+	I think that should make for proper @_-aliasing and context
+	propagation.
+	* Fixed obscure bug in 'pretty' (used by the EXAMINE method) that
+	would mistake some "0"-initial numerals for real decimal numbers.
+		
 2000-05-13  Sean M. Burke  sburke@cpan.org
 
 	* Release 1.22 -- just noting my new email address.

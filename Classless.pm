@@ -1,5 +1,5 @@
 
-#Time-stamp: "2000-05-13 19:42:13 MDT"
+#Time-stamp: "2000-08-21 14:56:49 MDT"
 
 require 5;
 package Class::Classless;
@@ -7,7 +7,7 @@ use strict;
 use vars qw($VERSION @ISA $Debug $ROOT %Pretty_form);
 use Carp;
 
-$VERSION = "1.22";
+$VERSION = "1.33";
 @ISA = ();
 $Debug = 0 unless defined $Debug;
 
@@ -139,10 +139,18 @@ that the copying of parent attributes is B<not> a deep copy -- the
 parent has foo => [bar, baz], then the child will have a reference to
 that same list, B<not> a copy of that list!)
 
+(Also, if $thing->is_lineage_memoized is true, the clone will have a
+memoized lineage too.  And note that $Class::Classless::ROOT has
+lineage memoization off.  See the description of
+"$thing->memoize_lineage", below, for a description of what this all
+means.)
+
 * $thing->polyclone($thing2, $thing3...) -- makes a new object based
 on $thing, $thing2, $thing3, etc.  Attributes in $thing overrride
 those in $thing2, and so on.  The PARENTS list will consist of $thing,
-$thing2, $thing3, etc., in that order.
+$thing2, $thing3, etc., in that order.  
+Also, if $thing->is_lineage_memoized is true, the clone will have
+a memoized lineage too.
 
 * $thing->get_i('attrib') -- ("get, with inheritance").
 $thing->get_i('foo') returns the value of the 'foo' attribute for
@@ -227,6 +235,78 @@ the list of nodes, in order, starting with $thing (and presumably
 ending with $ROOT), that you would search thru for method calls on
 $thing, or get_i calls on $thing.  Do not try to override the ISA_TREE
 method.
+
+* $thing->memoize_lineage -- makes this object eligible for having its
+ISA_TREE cached.  Normally, every method call on an object causes the
+routine ISA_TREE to be called, so that Class::Classless knows where to
+look for methods, and in what order.  You can avoid this having to
+happen each time by causing the results of $thing->ISA_TREE to be
+memoized (cached); then, subsequent method calls on $thing will just
+use the cached linearization.  This means, however, that you must not
+change any of $thing's ancestry (who its parents are, or any of its
+parents' parents, etc.), or the changes will not be noticed.  (If you
+do want to change any such thing, unmemoize the lineage first, as
+below.  Also remember that you will need to unmemoize the lineages of
+all existing clones, too.)
+
+(The ISA_TREE cache happens to be stored in $thing->{'ISA_CACHE'}.)
+
+$thing->memoize_lineage has no effect if memoization is already on.
+This always returns $thing, which makes it convenient for calling on
+newly cloned objects:
+
+  $thing = $foo->clone->memoize_lineage;
+
+Note that as described above, the normal behavior of $foo->clone is to
+turn on ISA_TREE memoization for any new clones of $foo if $foo has
+its ISA_TREE memoization turned on.
+
+* $thing->unmemoize_lineage -- this turns off the above-mentioned
+ISA_TREE cache for $thing.  Has no effect if lineage-memoization is
+already off.  Like $thing->memoize_lineage, this returns $thing.
+Think carefully about how you use this.  It's never going to be a
+problem if the only way you call it is as:
+
+  $thing = $foo->clone->unmemoize_lineage;
+
+I.e., when you want a new object whose lineage you want to be
+free to alter later without having to worry about caching.
+(And when in doubt, leave caching off.)
+
+However, note that this is wrong:
+
+  $thing = $foo->clone->memoize_lineage;
+  ...stuff...
+  push @{$thing->{'PARENTS'}}, $yorp;
+  $thing->unmemoize_lineage;
+
+...because the 'unmemoize_lineage' call on $thing will be using an
+already out-of-date cache of its old ISA_TREE.  That is likely to be
+harmless, though, unless $yorp overrides the normal
+'unmemoize_lineage' method.  But this is better:
+
+  $thing = $foo->clone->memoize_lineage;
+  ...stuff...
+  $thing->unmemoize_lineage;
+  push @{$thing->{'PARENTS'}}, $yorp;
+  $thing->memoize_lineage;
+
+But consider this harder case:
+
+  $thing = $foo->clone->memoize_lineage;
+  ...stuff...
+  $zaz = $thing->clone; # so it will have memoization 
+  ...more stuff...
+  $thing->unmemoize_lineage;
+  push @{$thing->{'PARENTS'}}, $yorp;
+  $thing->memoize_lineage;
+
+Even though you correctly turned off $thing's cache at the right
+moment, you forgot about $zaz's cache, which was and still is out of
+date.
+
+* $thing->is_lineage_memoized -- returns true iff $thing is using
+lineage memoization.
 
 * $thing->DESTROY -- this is here to trap DESTROY calls that Perl
 makes when it's about to deallocate an object, either when the
@@ -663,6 +743,11 @@ Consult the source for details.  It's not that long.
 
 =head1 CAVEATS AND MUSINGS
 
+* The moral of this module is that if you don't like the object
+framework that comes with a language, quit your bitching and just
+make your own!  And the meta-moral is that object systems aren't
+black boxes that have to be fused with the language itself.
+
 * Note that the C<can> you may export from UNIVERSAL has nothing
 at all to do with the C<can> that you should be using for
 Class::Classless objects.  The only way you should call C<can>
@@ -710,7 +795,7 @@ callstate objects, email me -- I'd be interested in hearing what you
 have in mind.
 
 * While I was writing Class::Classless, I read up on Self.  To quote
-FOLDOC (C<http://wombat.doc.ic.ac.uk/foldoc/foldoc.cgi?query=Self>),
+FOLDOC (C<http://foldoc.doc.ic.ac.uk/foldoc/foldoc.cgi?query=Self>),
 Self is/was "a small, dynamically typed object-oriented language,
 based purely on prototypes and delegation. Self was developed by the
 Self Group at Sun Microsystems Laboratories, Inc. and Stanford
@@ -740,6 +825,9 @@ assuring me that the idea of objects-without-class wasn't just some
 Felliniesque fever dream I had, but is a concept that has precedent in
 other programming languages.
 
+And thanks to Damian Conway for stritching the brines of his poor
+students with this module.
+
 =head1 COPYRIGHT
 
 Copyright (c) 1999, 2000 Sean M. Burke.  All rights reserved.
@@ -757,6 +845,9 @@ Sean M. Burke, sburke@cpan.org
 ###########################################################################
 
 $Class::Classless::NAMES = 0;
+
+# Instantiate the one prototype object, and pack it with all the handy
+#  methods that we want it to have.
 
 $ROOT = bless {
   'PARENTS' => [], # I am the obj that has no parents
@@ -776,6 +867,8 @@ $ROOT = bless {
        $new->{'PARENTS'} = [ $orig ];
        $new->{'METHODS'} = { };
        $new->{'NAME'} = 'x_' . $Class::Classless::NAMES++;
+
+       $new->{'ISA_CACHE'} = 1 if $orig->{'ISA_CACHE'};
 
        return $new;
     },
@@ -802,6 +895,9 @@ $ROOT = bless {
        # Now define some niceties:
        $new->{'PARENTS'} = \@origs;
        $new->{'METHODS'} = { };
+
+       $new->{'ISA_CACHE'} = 1 if exists $origs[0]{'ISA_CACHE'};
+
        $new->{'NAME'} = 'x_' . $Class::Classless::NAMES++;
        return $new;
     },
@@ -861,7 +957,7 @@ $ROOT = bless {
       }
       return 0; # nothing found
     },
-
+    
     'allcan' => sub {
       # Return all so-named methods in $it's ISA tree, or () if none.
       my($it, $m) = @_[0,2];
@@ -906,10 +1002,45 @@ $ROOT = bless {
         @{$_[1][2]};
     },
 
-  }, # end of behaviors hash.
+    # deep voodoo...
+    'memoize_lineage' => sub {
+      $_[0]{'ISA_CACHE'} ||= $_[1][2]; # copy it right from the callstate
+      return $_[0];
+    },
+
+    'unmemoize_lineage' => sub {
+      delete $_[0]->{'ISA_CACHE'};
+      return $_[0];
+    },
+
+    'is_lineage_memoized' => sub {
+      return exists $_[0]{'ISA_CACHE'};
+    }
+
+    ##
+    #
+    # Bad idea -- because if you've changed the real lineage,
+    # even the call to $thing->reset_memoize_lineage will use
+    # a corrupted lineage in trying to look up this method.
+    #'reset_memoize_lineage' => sub {
+    #  $_[0]{'ISA_CACHE'} = 1;
+    #  Class::Classless::X::ISA_TREE($_[0]); # force-set now.
+    #  return $_[0];
+    #},
+    #
+    #* $thing->reset_memoize_lineage -- If you are using lineage
+    #memoization and I<do> change $thing's ancestry, you can reset its
+    #cache using this method, to force it to take note of any changes in
+    #its ancestry.  If lineage memoization is off, this turns it on.  Like
+    #$thing->memoize_lineage, this returns $thing.
+    #
+    ##
+
+  }, # end of METHODS hash.
 },
 'Class::Classless::X'   # the class where classless things live!
 ;
+# End of creating $ROOT and its methods.
 
 $Class::Classless::X::VERSION = '0.00';
 @Class::Classless::X::ISA = ();
@@ -941,41 +1072,55 @@ sub Class::Classless::X::AUTOLOAD {
   my $no_fail = $prevstate ? $prevstate->[3] : undef;
   my $i       = $prevstate ? ($prevstate->[1] + 1) : 0;
    # where to start scanning
-  my @lineage =
-    $prevstate ? @{$prevstate->[2]} : &Class::Classless::X::ISA_TREE($it);
-   # get the linearization of the ISA tree
+  my $lineage;
+
+  # Get the linearization of the ISA tree
+  if($prevstate) {
+    $lineage = $prevstate->[2];
+  } elsif(defined $it->{'ISA_CACHE'} and ref $it->{'ISA_CACHE'} ){
+    $lineage = $it->{'ISA_CACHE'};
+  } else {
+    $lineage = [ &Class::Classless::X::ISA_TREE($it) ];
+  }
+
+  # Was:
+  #my @lineage =
+  #  $prevstate ? @{$prevstate->[2]}
+  #             : &Class::Classless::X::ISA_TREE($it);
+  # # Get the linearization of the ISA tree
+  # # ISA-memoization happens in the ISA_TREE function.
   
-  for(; $i < @lineage; ++$i) {
-    print "Looking in ", $lineage[$i]->{'NAME'} || $lineage[$i], "\n"
+  for(; $i < @$lineage; ++$i) {
+    print "Looking in ", $lineage->[$i]{'NAME'} || $lineage->[$i], "\n"
       if $Debug;
 
-    if( !defined($no_fail) and exists($lineage[$i]{'NO_FAIL'}) ) {
-      $no_fail = ($lineage[$i]{'NO_FAIL'} || 0); # so the first NO_FAIL sets it
+    if( !defined($no_fail) and exists($lineage->[$i]{'NO_FAIL'}) ) {
+      $no_fail = ($lineage->[$i]{'NO_FAIL'} || 0);
+      # so the first NO_FAIL sets it
       print
         "Setting no_fail for this call to $no_fail from ",
-        $lineage[$i]->{'NAME'} || $lineage[$i], "\n"
+        $lineage->[$i]{'NAME'} || $lineage->[$i], "\n"
        if $Debug;
     }
 
-    if(     ref($lineage[$i]{'METHODS'}     || 0)  # sanity
-      && exists($lineage[$i]{'METHODS'}{$m})
+    if(     ref($lineage->[$i]{'METHODS'}     || 0)  # sanity
+      && exists($lineage->[$i]{'METHODS'}{$m})
     ){
       # We found what we were after.  Now see what to do with it.
-      my $v = $lineage[$i]{'METHODS'}{$m};
+      my $v = $lineage->[$i]{'METHODS'}{$m};
       return $v unless defined $v and ref $v;
 
       if(ref($v) eq 'CODE') { # normal case, I expect!
-        my @args =
-          (
-           $it,                   # $_[0]    -- target object
-           # a NEW callstate
-           bless([$m, $i, \@lineage, $no_fail, $prevstate ? 1 : 0],
-                 'Class::Classless::CALLSTATE'
-                ),                # $_[1]    -- the callstate
-           @_                     # @_[2...] -- the args
-         )
-        ; # copy it, so that shifting on it is harmless
-        return &{ $lineage[$i]{'METHODS'}{$m} }(@args);  # call it!
+        # Used to have copying of the arglist here.
+        #  But it was apparently useless, so I deleted it
+        unshift @_, 
+          $it,                   # $_[0]    -- target object
+          # a NEW callstate
+          bless([$m, $i, $lineage, $no_fail, $prevstate ? 1 : 0],
+                'Class::Classless::CALLSTATE'
+               ),                # $_[1]    -- the callstate
+        ;
+        goto &{ $v }; # yes, magic goto!
       }
       return @$v if ref($v) eq '_deref_array';
       return $$v if ref($v) eq '_deref_scalar';
@@ -1011,8 +1156,24 @@ sub Class::Classless::X::DESTROY {
 sub Class::Classless::X::ISA_TREE {
   # The linearizer!
   # Returns the search path for $_[0], starting with $_[0]
-  use strict;
+  # Possibly memoized.
 
+  # I stopped being able to understand this algorithm about five
+  #  minutes after I wrote it.
+  use strict;
+  
+  my $set_cache = 0; # flag to set the cache on the way out
+  
+  if(exists($_[0]{'ISA_CACHE'})) {
+    return    @{$_[0]{'ISA_CACHE'}}
+     if defined $_[0]{'ISA_CACHE'}
+        and ref $_[0]{'ISA_CACHE'};
+     
+    # Otherwise, if exists but is not a ref, it's a signal that it should
+    #  be replaced at the earliest, with a listref
+    $set_cache = 1;
+  }
+  
   print "ISA_TREEing for <", $_[0]{'NAME'} || $_[0], ">\n"
    if $Debug > 1;
 
@@ -1026,7 +1187,6 @@ sub Class::Classless::X::ISA_TREE {
   #     so that means that $y can be pushed to the stack only after
   #      we've pushed $x to the stack.
   
-
   my @tree_nodes;
   {
     my $current;
@@ -1061,7 +1221,10 @@ sub Class::Classless::X::ISA_TREE {
      if $Debug > 1;
 
     # If there was no MI, then that first scan was sufficient.
-    return @tree_nodes unless $has_mi;
+    unless($has_mi) {
+      $_[0]{'ISA_CACHE'} = \@tree_nodes if $set_cache;
+      return @tree_nodes;
+    }
 
     # Otherwise, toss this list and rescan, consulting %last_child
   }
@@ -1112,7 +1275,8 @@ sub Class::Classless::X::ISA_TREE {
     }
   }
   #print "Contents of out: ", nodelist(@out), "\n";
-
+  
+  $_[0]{'ISA_CACHE'} = \@out if $set_cache;
   return @out;
 }
 
@@ -1227,8 +1391,17 @@ sub pretty { # for Pretty-Print, but doesn't print
            } elsif(!length($_)) { # empty string
              "''";
 
-           } elsif( m/^-?\d+(?:\.\d+)?$/s ) { # a number
+           } elsif($_ eq '0' or m/^-?(?:[1-9]\d*)$/s) {  # integers
+	     # Was just: m/^-?\d+(?:\.\d+)?$/s
+             # but that's over-broad, as let "0123" thru, which is
+             # wrong, since that's octal 0123, == decimal 83.
+
+             # m/^-?(?:(?:[1-9]\d*)|0)(?:\.\d+)?$/s and $_ ne '-0'
+             # would let thru all well-formed numbers, but also
+             # non-canonical forms of them like 0.3000000.
+             # Better to just stick to integers I think.
              $_;
+
            } elsif( # text with junk in it
               #s<([^\x20\x21\x23\x27-\x3F\x41-\x5B\x5D-\x7E])>
               # <'\\x'.(unpack("H2",$1))>eg
@@ -1257,8 +1430,13 @@ sub nodelist { join ', ', map { "" . ($_->{'NAME'} || $_) . ""} @_ }
 ###########################################################################
 # Methods for the CALLSTATE class.
 #  Basically, CALLSTATE objects represent the state of the dispatcher,
-#  frozen at the moment when the method call was dispatched to the
-#  appropriate sub
+#   frozen at the moment when the method call was dispatched to the
+#   appropriate sub.
+#  In the grand scheme of things, this needn't be a class -- I could
+#   have just made the callstate data-object be a hash with documented
+#   keys, or a closure that responded to only certain parameters,
+#   etc.  But I like it this way.  And I like being able to say simply
+#   $cs->NEXT
 
 $Class::Classless::CALLSTATE::VERSION = $Class::Classless::VERSION;
 @Class::Classless::ISA = ();
